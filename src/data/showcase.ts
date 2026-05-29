@@ -3,7 +3,7 @@ import type { CarSeries, PaintOption } from '../types/car';
 export const carSeries: CarSeries[] = [
   {
     id: 'aero-gt',
-    name: 'Aero GT',
+    name: 'Xiaomi Vision Gt',
     tagline: 'Dual motor grand tourer',
     range: '721 km',
     acceleration: '3.1 s',
@@ -31,6 +31,14 @@ export const carSeries: CarSeries[] = [
 ];
 
 export const paintOptions: PaintOption[] = [
+  {
+    id: 'factory-celadon',
+    name: '原厂喷漆',
+    finish: '青釉色金属清漆',
+    swatchClass: 'bg-gradient-to-br from-[#f3fbff] via-[#C5D9E6] to-[#6f9eba]',
+    glowClass: 'from-[#C5D9E6]/45 via-cyan-200/30 to-[#4A7B6F]/20',
+    imageToneClass: 'saturate-100 hue-rotate-0',
+  },
   {
     id: 'liquid-silver',
     name: 'Liquid Silver',

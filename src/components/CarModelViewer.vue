@@ -13,10 +13,18 @@ const props = defineProps<{
 const viewportRef = ref<HTMLDivElement | null>(null);
 
 const paintColors: Record<string, number> = {
+  'factory-celadon': 0xc5d9e6,
   'liquid-silver': 0xd7dde8,
   'solar-red': 0xc41f3b,
   'ion-blue': 0x2563eb,
   graphite: 0x27272a,
+};
+
+const factoryPalette = {
+  exterior: 0xc5d9e6,
+  interior: 0x4a7b6f,
+  detail: 0xb8c0c8,
+  caliper: 0xe11d48,
 };
 
 let renderer: THREE.WebGLRenderer | null = null;
@@ -25,7 +33,79 @@ let camera: THREE.PerspectiveCamera | null = null;
 let controls: OrbitControls | null = null;
 let animationFrame = 0;
 let resizeObserver: ResizeObserver | null = null;
-let paintMaterials: Array<THREE.MeshPhysicalMaterial | THREE.MeshStandardMaterial> = [];
+let exteriorMaterials: Array<THREE.MeshPhysicalMaterial | THREE.MeshStandardMaterial> = [];
+let interiorMaterials: Array<THREE.MeshPhysicalMaterial | THREE.MeshStandardMaterial> = [];
+let detailMaterials: Array<THREE.MeshPhysicalMaterial | THREE.MeshStandardMaterial> = [];
+let caliperMaterials: Array<THREE.MeshPhysicalMaterial | THREE.MeshStandardMaterial> = [];
+let showroomTimer: ReturnType<typeof window.setTimeout> | null = null;
+let pointerInsideViewport = false;
+
+const clearShowroomTimer = () => {
+  if (!showroomTimer) return;
+  window.clearTimeout(showroomTimer);
+  showroomTimer = null;
+};
+
+const setShowroomRotation = (enabled: boolean) => {
+  if (!controls) return;
+  controls.autoRotate = enabled;
+};
+
+const pauseShowroomRotation = () => {
+  clearShowroomTimer();
+  setShowroomRotation(false);
+};
+
+const queueShowroomRotation = () => {
+  clearShowroomTimer();
+  showroomTimer = window.setTimeout(() => {
+    if (!pointerInsideViewport) setShowroomRotation(true);
+  }, 5000);
+};
+
+const handlePointerEnter = () => {
+  pointerInsideViewport = true;
+  pauseShowroomRotation();
+};
+
+const handlePointerLeave = () => {
+  pointerInsideViewport = false;
+  pauseShowroomRotation();
+  queueShowroomRotation();
+};
+
+const handlePointerDown = () => {
+  pauseShowroomRotation();
+};
+
+const handlePointerMove = () => {
+  if (pointerInsideViewport) pauseShowroomRotation();
+};
+
+const handlePointerUp = (event: PointerEvent) => {
+  if (event.pointerType === 'touch') {
+    pointerInsideViewport = false;
+    queueShowroomRotation();
+  }
+};
+
+const handleWheel = () => {
+  pauseShowroomRotation();
+};
+
+const tunePhysicalMaterial = (
+  material: THREE.MeshPhysicalMaterial | THREE.MeshStandardMaterial,
+  options: { color: number; metalness: number; roughness: number; clearcoat?: number; clearcoatRoughness?: number },
+) => {
+  material.color.setHex(options.color);
+  material.metalness = options.metalness;
+  material.roughness = options.roughness;
+  if (material instanceof THREE.MeshPhysicalMaterial) {
+    material.clearcoat = options.clearcoat ?? material.clearcoat;
+    material.clearcoatRoughness = options.clearcoatRoughness ?? material.clearcoatRoughness;
+  }
+  material.needsUpdate = true;
+};
 
 const createVehicleModel = () => {
   const vehicle = new THREE.Group();
@@ -37,7 +117,7 @@ const createVehicleModel = () => {
     clearcoat: 0.85,
     clearcoatRoughness: 0.18,
   });
-  paintMaterials = [bodyMaterial];
+  exteriorMaterials = [bodyMaterial];
 
   const glassMaterial = new THREE.MeshPhysicalMaterial({
     color: 0x0f172a,
@@ -50,6 +130,7 @@ const createVehicleModel = () => {
 
   const tireMaterial = new THREE.MeshStandardMaterial({ color: 0x050505, roughness: 0.62 });
   const rimMaterial = new THREE.MeshStandardMaterial({ color: 0xd1d5db, metalness: 0.78, roughness: 0.24 });
+  detailMaterials = [rimMaterial];
 
   const body = new THREE.Mesh(new THREE.BoxGeometry(4.6, 0.72, 1.9), bodyMaterial);
   body.position.y = 0.28;
@@ -98,16 +179,50 @@ const createVehicleModel = () => {
 };
 
 const applyPaint = (paintId: string) => {
-  const color = paintColors[paintId] ?? paintColors['liquid-silver'];
-  paintMaterials.forEach((material) => {
-    material.color.setHex(color);
-    material.needsUpdate = true;
+  if (paintId === 'factory-celadon') {
+    exteriorMaterials.forEach((material) => {
+      tunePhysicalMaterial(material, {
+        color: factoryPalette.exterior,
+        metalness: 0.74,
+        roughness: 0.2,
+        clearcoat: 0.9,
+        clearcoatRoughness: 0.12,
+      });
+    });
+    interiorMaterials.forEach((material) => {
+      tunePhysicalMaterial(material, {
+        color: factoryPalette.interior,
+        metalness: 0.04,
+        roughness: 0.72,
+        clearcoat: 0.05,
+        clearcoatRoughness: 0.8,
+      });
+    });
+    detailMaterials.forEach((material) => {
+      tunePhysicalMaterial(material, { color: factoryPalette.detail, metalness: 0.82, roughness: 0.22 });
+    });
+    caliperMaterials.forEach((material) => {
+      tunePhysicalMaterial(material, { color: factoryPalette.caliper, metalness: 0.35, roughness: 0.3 });
+    });
+    return;
+  }
+
+  exteriorMaterials.forEach((material) => {
+    tunePhysicalMaterial(material, {
+      color: paintColors[paintId] ?? paintColors['liquid-silver'],
+      metalness: 0.72,
+      roughness: 0.26,
+      clearcoat: 0.85,
+      clearcoatRoughness: 0.18,
+    });
   });
 };
 
 const collectPaintMaterials = (model: THREE.Object3D) => {
-  const blockedNames = ['glass', 'window', 'tire', 'tyre', 'wheel', 'rubber', 'rim', 'light'];
-  const materials = new Set<THREE.MeshPhysicalMaterial | THREE.MeshStandardMaterial>();
+  const exterior = new Set<THREE.MeshPhysicalMaterial | THREE.MeshStandardMaterial>();
+  const interior = new Set<THREE.MeshPhysicalMaterial | THREE.MeshStandardMaterial>();
+  const detail = new Set<THREE.MeshPhysicalMaterial | THREE.MeshStandardMaterial>();
+  const caliper = new Set<THREE.MeshPhysicalMaterial | THREE.MeshStandardMaterial>();
 
   model.traverse((object) => {
     if (!(object instanceof THREE.Mesh)) return;
@@ -119,13 +234,31 @@ const collectPaintMaterials = (model: THREE.Object3D) => {
 
     clonedMaterials.forEach((material) => {
       const materialName = material.name.toLowerCase();
-      const shouldSkip = blockedNames.some((name) => meshName.includes(name) || materialName.includes(name));
-      if (shouldSkip || !('color' in material)) return;
-      materials.add(material as THREE.MeshPhysicalMaterial | THREE.MeshStandardMaterial);
+      const combinedName = `${meshName} ${materialName}`;
+      if (!('color' in material)) return;
+
+      const targetMaterial = material as THREE.MeshPhysicalMaterial | THREE.MeshStandardMaterial;
+      if (['glass', 'window', 'tire', 'tyre', 'rubber', 'light'].some((name) => combinedName.includes(name))) return;
+      if (['caliper', 'brake'].some((name) => combinedName.includes(name))) {
+        caliper.add(targetMaterial);
+        return;
+      }
+      if (['rim', 'wheel', 'chrome', 'metal'].some((name) => combinedName.includes(name))) {
+        detail.add(targetMaterial);
+        return;
+      }
+      if (['interior', 'seat', 'leather', 'cabin', 'dash', 'steering'].some((name) => combinedName.includes(name))) {
+        interior.add(targetMaterial);
+        return;
+      }
+      exterior.add(targetMaterial);
     });
   });
 
-  paintMaterials = Array.from(materials);
+  exteriorMaterials = Array.from(exterior);
+  interiorMaterials = Array.from(interior);
+  detailMaterials = Array.from(detail);
+  caliperMaterials = Array.from(caliper);
   applyPaint(props.paint.id);
 };
 
@@ -166,11 +299,22 @@ onMounted(() => {
   controls = new OrbitControls(camera, renderer.domElement);
   controls.enableDamping = true;
   controls.enablePan = false;
+  controls.autoRotate = false;
+  controls.autoRotateSpeed = 0.55;
   controls.minDistance = 4.2;
   controls.maxDistance = 8;
   controls.minPolarAngle = 0.82;
   controls.maxPolarAngle = 1.62;
   controls.target.set(0, 0.35, 0);
+  controls.addEventListener('start', pauseShowroomRotation);
+  controls.addEventListener('end', queueShowroomRotation);
+
+  renderer.domElement.addEventListener('pointerenter', handlePointerEnter);
+  renderer.domElement.addEventListener('pointerleave', handlePointerLeave);
+  renderer.domElement.addEventListener('pointerdown', handlePointerDown);
+  renderer.domElement.addEventListener('pointermove', handlePointerMove);
+  renderer.domElement.addEventListener('pointerup', handlePointerUp);
+  renderer.domElement.addEventListener('wheel', handleWheel);
 
   scene.add(new THREE.HemisphereLight(0xffffff, 0x0f172a, 2.6));
 
@@ -220,6 +364,7 @@ onMounted(() => {
     animationFrame = window.requestAnimationFrame(animate);
   };
   animate();
+  queueShowroomRotation();
 });
 
 watch(
@@ -231,8 +376,17 @@ watch(
 
 onBeforeUnmount(() => {
   window.cancelAnimationFrame(animationFrame);
+  clearShowroomTimer();
   resizeObserver?.disconnect();
+  controls?.removeEventListener('start', pauseShowroomRotation);
+  controls?.removeEventListener('end', queueShowroomRotation);
   controls?.dispose();
+  renderer?.domElement.removeEventListener('pointerenter', handlePointerEnter);
+  renderer?.domElement.removeEventListener('pointerleave', handlePointerLeave);
+  renderer?.domElement.removeEventListener('pointerdown', handlePointerDown);
+  renderer?.domElement.removeEventListener('pointermove', handlePointerMove);
+  renderer?.domElement.removeEventListener('pointerup', handlePointerUp);
+  renderer?.domElement.removeEventListener('wheel', handleWheel);
 
   scene?.traverse((object) => {
     if (!(object instanceof THREE.Mesh)) return;
