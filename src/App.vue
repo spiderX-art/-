@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue';
 import CarModelDetail from './components/CarModelDetail.vue';
+import CarModelViewer from './components/CarModelViewer.vue';
 import CarSeriesList from './components/CarSeriesList.vue';
 import PaintSelector from './components/PaintSelector.vue';
 import { carSeries, paintOptions } from './data/showcase';
@@ -22,14 +23,7 @@ const activePaint = computed(() => paintOptions.find((paint) => paint.id === act
 
       <CarModelDetail :car="activeCar" :paint="activePaint">
         <template #model>
-          <div class="absolute bottom-12 h-20 w-4/5 rounded-[100%] bg-black/50 blur-2xl" />
-          <img
-            src="/assets/car-hero.png"
-            :alt="`${activeCar.name} 3D model preview`"
-            class="relative z-10 w-full max-w-5xl select-none object-contain drop-shadow-[0_34px_40px_rgba(0,0,0,0.55)] transition duration-500 hover:scale-[1.02]"
-            :class="activePaint.imageToneClass"
-            draggable="false"
-          />
+          <CarModelViewer :paint="activePaint" model-url="/assets/car_models/xiaomi_vision_gt.glb" />
         </template>
       </CarModelDetail>
     </div>
